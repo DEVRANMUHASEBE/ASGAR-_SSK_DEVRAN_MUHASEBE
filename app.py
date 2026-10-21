@@ -10,7 +10,8 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from artifact_tool import Workbook, SpreadsheetFile, Blob
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 
 st.set_page_config(page_title="DEVRAN | Asgari İşçilik",page_icon="🏗️",layout="wide")
 st.markdown('''<style>.stApp{background:#f7f9fc} .block-container{padding-top:1.4rem;max-width:1320px}h1,h2,h3{color:#172d4f}.stButton button[kind=primary]{background:#16345e;border-color:#16345e}</style>''',unsafe_allow_html=True)
@@ -34,37 +35,42 @@ def money(v):
     except (ValueError, TypeError): return 0.0
 
 def build_xlsx(rows):
-    wb=Workbook.create(); sh=wb.worksheets.add('Aylik_SGK')
-    sh.get_range('A1:D1').values=[['Yıl','Ay','Prime Esas Kazanç (TL)','Ödenen SGK Primi (TL)']]
-    sh.get_range('A1:D1').format={'fill':'#16345E','font':{'bold':True,'color':'#FFFFFF'},'row_height':30}
-    sh.get_range('A:A').format.column_width=12
-    sh.get_range('B:B').format.column_width=18
-    sh.get_range('C:D').format.column_width=27
-    if rows:
-        sh.get_range_by_indexes(1,0,len(rows),4).values=[[int(r[0]),str(r[1]),float(r[2]),float(r[3])] for r in rows]
-        sh.get_range(f'C2:D{len(rows)+1}').set_number_format('#,##0.00')
-    summary=wb.worksheets.add('Aciklama')
-    summary.get_range('A1').values=[['DEVRAN MALİ MÜŞAVİRLİK - AYLIK SGK ŞABLONU']]
-    summary.get_range('A2').values=[['Her ayın prime esas kazancını C sütununa, fiilen ödenen primi D sütununa yazınız.']]
-    summary.get_range('A3').values=[['Asgari işçilik karşılaştırmasında C sütununun toplamı esas alınır.']]
-    summary.get_range('A:A').format.column_width=100
-    with __import__('tempfile').NamedTemporaryFile(suffix='.xlsx') as tmp:
-        SpreadsheetFile.export_xlsx(wb).save(tmp.name)
-        return Path(tmp.name).read_bytes()
+    wb=Workbook()
+    sh=wb.active
+    sh.title='Aylik_SGK'
+    sh.append(['Yıl','Ay','Prime Esas Kazanç (TL)','Ödenen SGK Primi (TL)'])
+    for cell in sh[1]:
+        cell.fill=PatternFill('solid',fgColor='16345E')
+        cell.font=Font(bold=True,color='FFFFFF')
+        cell.alignment=Alignment(vertical='center')
+    sh.row_dimensions[1].height=26
+    for letter,width in {'A':14,'B':20,'C':30,'D':30}.items():
+        sh.column_dimensions[letter].width=width
+    for r in rows:
+        sh.append([int(r[0]),str(r[1]),float(r[2]),float(r[3])])
+    for row in sh.iter_rows(min_row=2,min_col=3,max_col=4):
+        for cell in row: cell.number_format='#,##0.00'
+    summary=wb.create_sheet('Aciklama')
+    summary.append(['DEVRAN MALİ MÜŞAVİRLİK - AYLIK SGK ŞABLONU'])
+    summary.append(['Her ayın prime esas kazancını C sütununa, fiilen ödenen primi D sütununa yazınız.'])
+    summary.append(['Asgari işçilik karşılaştırmasında C sütununun toplamı esas alınır.'])
+    summary.column_dimensions['A'].width=110
+    summary['A1'].font=Font(bold=True,color='16345E',size=14)
+    buf=io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 def read_xlsx(data):
-    import tempfile
-    with tempfile.NamedTemporaryFile(suffix='.xlsx') as tmp:
-        tmp.write(data);tmp.flush()
-        wb=SpreadsheetFile.import_xlsx(Blob.load(tmp.name))
-        sh=wb.worksheets.get_item('Aylik_SGK')
-        raw=sh.get_range('A1:D301').values
+    wb=load_workbook(io.BytesIO(data),read_only=True,data_only=True)
+    sh=wb['Aylik_SGK']
     result=[]
-    for r in raw[1:]:
-        if not r or r[0] in [None,'']:continue
+    for r in sh.iter_rows(min_row=2,max_col=4,values_only=True):
+        if not r or r[0] in (None,''): continue
         try:
-            y=int(float(r[0]));month=str(r[1]);result.append([y,month,money(r[2]),money(r[3])])
-        except Exception:continue
+            y=int(float(r[0]))
+            result.append([y,str(r[1]),money(r[2]),money(r[3])])
+        except (ValueError,TypeError):continue
+    wb.close()
     return result
 
 def pdf_report(project,details,monthly,total,required,base,missing,estimated,rate,prime):
