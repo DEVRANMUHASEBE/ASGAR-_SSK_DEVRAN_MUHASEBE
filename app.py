@@ -63,11 +63,11 @@ st.markdown('''<style>.stApp{background:#f7f9fc} .block-container{padding-top:1.
 LOGO = Path(__file__).with_name('logo.png')
 a,b=st.columns([1,7])
 with a:
-    if LOGO.exists(): st.image(str(LOGO),width=110)
+    if LOGO.exists(): st.image(str(LOGO),width=125)
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.13')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.14')
 st.divider()
 
 def tr(n, unit=' TL'):
@@ -91,7 +91,7 @@ def pdf_report(project,details,total,required,rate,estimated_premium,premium_rat
     story=[]
     if LOGO.exists():
         try:
-            logo=Image(str(LOGO),width=68,height=68,kind='proportional');logo.hAlign='CENTER';story.append(logo);story.append(Spacer(1,5))
+            logo=Image(str(LOGO),width=88,height=88,kind='proportional');logo.hAlign='CENTER';story.append(logo);story.append(Spacer(1,5))
         except Exception:pass
     story += [Paragraph('İNŞAAT ASGARİ İŞÇİLİK - ÖZET HESAP RAPORU',styles['DevTxt']),Spacer(1,12)]
     info=[['Proje / Mükellef',project['ad']],['Ada / Parsel',project['ada']+' / '+project['parsel']],['İnşaat Dönemi',project['dates']],['İnşaat Durumu',project['status']],['Yapı / Blok Sayısı',str(len(details))]]
