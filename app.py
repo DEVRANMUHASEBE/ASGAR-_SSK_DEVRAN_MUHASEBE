@@ -11,10 +11,24 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import reportlab
 
-# Resmi Gazete yapi yaklasik birim maliyetleri (TL/m2).
-# 2024 RG 20.02.2024/32466; 2025 RG 31.01.2025/32799;
-# 2026 RG 03.02.2026/33157.
+# 2021–2026 yapı yaklaşık birim maliyetleri (TL/m²).
+# Aynı yılda birden fazla tebliğ varsa kullanıcı talebine göre SON yayımlanan esas alınır.
+# 2021: RG 24.03.2021 / 31433
+# 2022/3: RG 13.09.2022 / 31952 (2022'nin üçüncü tarifesi)
+# 2023/2: RG 12.08.2023 / 32277 (2023'ün ikinci tarifesi)
+# 2024: RG 20.02.2024 / 32466; 2025: RG 31.01.2025 / 32799;
+# 2026: RG 03.02.2026 / 33157.
+# Eski yıllarda bulunmayan sınıflara tahmini bedel tanımlanmaz.
 OFFICIAL_COSTS = {
+    2021: {'I-A':255,'I-B':390,'II-A':640,'II-B':940,'II-C':1030,
+           'III-A':1360,'III-B':1800,'IV-A':1920,'IV-B':2300,'IV-C':2480,
+           'V-A':2970,'V-B':3600,'V-C':4000,'V-D':4700},
+    2022: {'I-A':650,'I-B':990,'II-A':1650,'II-B':2400,'II-C':2685,
+           'III-A':3450,'III-B':4650,'IV-A':4950,'IV-B':5900,'IV-C':6400,
+           'V-A':7700,'V-B':9350,'V-C':10300,'V-D':12150},
+    2023: {'I-A':1050,'I-B':1550,'II-A':2600,'II-B':3800,'II-C':5350,
+           'III-A':7500,'III-B':9000,'IV-A':10200,'IV-B':12050,'IV-C':12450,
+           'V-A':13800,'V-B':16250,'V-C':18100,'V-D':21400},
     2024: {'I-A':1500,'I-B':2100,'II-A':3500,'II-B':5250,'II-C':7750,
            'III-A':12250,'III-B':14400,'III-C':None,'IV-A':15300,
            'IV-B':17400,'IV-C':18700,'V-A':21300,'V-B':22250,
@@ -30,6 +44,7 @@ OFFICIAL_COSTS = {
            'IV-C':40500,'V-A':42350,'V-B':43850,'V-C':48750,
            'V-D':53500,'V-E':103500},
 }
+TARIFF_VERSIONS = {2021:'2021',2022:'2022/3',2023:'2023/2',2024:'2024',2025:'2025',2026:'2026'}
 
 def tariff_years(entry):
     """Bitiş yılı hariç: 1-2 takvim yılında başlangıç yılı; 3+ yılda bitişten önceki yılların ortalaması."""
@@ -52,7 +67,7 @@ with a:
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.11')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.12')
 st.divider()
 
 def tr(n, unit=' TL'):
@@ -168,7 +183,7 @@ else:
 if st.button('➕ Blok Ekle',on_click=add_block):st.rerun()
 
 st.subheader('3 · Otomatik birim maliyet tarifesi')
-st.caption('Aynı yıl veya takip eden yıl bitişinde başlangıç yılı; 3 yılda aradaki 2 yıl; 4 yılda aradaki 3 yılın ortalaması uygulanır. Tanımlı tarifeler: 2024–2026.')
+st.caption('Aynı yıl veya takip eden yıl bitişinde başlangıç yılı; 3 yılda aradaki 2 yıl; 4 yılda aradaki 3 yılın ortalaması uygulanır. Tanımlı tarifeler: 2021–2026. Aynı yılda birden fazla tebliğ varsa son yayımlanan tablo kullanılır (2022/3, 2023/2).')
 
 # Kullanıcının seçtiği mevzuat yöntemi tarife yıllarını belirler.
 needed = sorted({(y, e['klass']) for e in entries for y in tariff_years(e)})
@@ -182,7 +197,7 @@ if missing_rates:
 for year, cl in needed:
     amount = tariff_cost(year, cl)
     if amount is not None:
-        st.write(f'✅ **{year} / {cl}: {tr(amount, " TL/m²")}** (resmî tarife)')
+        st.write(f'✅ **{TARIFF_VERSIONS.get(year, str(year))} / {cl}: {tr(amount, " TL/m²")}** (resmî tarife)')
 
 def unit_cost(e):
     years = tariff_years(e)
