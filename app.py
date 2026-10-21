@@ -9,6 +9,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+import reportlab
 
 # Resmi Gazete yapi yaklasik birim maliyetleri (TL/m2).
 # 2024 RG 20.02.2024/32466; 2025 RG 31.01.2025/32799;
@@ -51,19 +52,25 @@ with a:
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.5')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.6')
 st.divider()
 
 def tr(n, unit=' TL'):
     return f'{n:,.2f}'.replace(',','X').replace('.',',').replace('X','.')+unit
 
-def pdf_report(project,details,total,required,rate):
+def pdf_report(project,details,total,required,rate,estimated_premium,premium_rate):
     buf=io.BytesIO(); doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=34,leftMargin=34,topMargin=32,bottomMargin=32)
-    fonts=[str(Path(__file__).with_name('DejaVuSans.ttf')),'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf','/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf']
-    font=next((x for x in fonts if os.path.exists(x)),None)
-    fname='Helvetica'
-    if font:
-        pdfmetrics.registerFont(TTFont('Devran',font));fname='Devran'
+    # ReportLab paketiyle birlikte gelen Vera fontu Türkçe karakterleri destekler.
+    # Sunucudaki sistem fontlarına bağımlı değildir; Helvetica'ya düşülmez.
+    font = Path(reportlab.__file__).parent / 'fonts' / 'Vera.ttf'
+    font_bold = Path(reportlab.__file__).parent / 'fonts' / 'VeraBd.ttf'
+    if not font.is_file() or not font_bold.is_file():
+        raise RuntimeError('PDF için gerekli Türkçe uyumlu Vera yazı tipi bulunamadı.')
+    if 'DevranTR' not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont('DevranTR', str(font)))
+        pdfmetrics.registerFont(TTFont('DevranTR-Bold', str(font_bold)))
+        pdfmetrics.registerFontFamily('DevranTR', normal='DevranTR', bold='DevranTR-Bold')
+    fname='DevranTR'
     styles=getSampleStyleSheet();styles.add(ParagraphStyle(name='DevTitle',fontName=fname,fontSize=15,leading=20,alignment=TA_CENTER,spaceAfter=14))
     styles.add(ParagraphStyle(name='DevTxt',fontName=fname,fontSize=9,leading=14))
     story=[]
@@ -78,12 +85,12 @@ def pdf_report(project,details,total,required,rate):
         t.setStyle(TableStyle([('GRID',(0,0),(-1,-1),.35,colors.lightgrey),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#E8EDF5')),('VALIGN',(0,0),(-1,-1),'MIDDLE'),('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6)]))
         return t
     story += [tbl(info,[145,365]),Spacer(1,12)]
-    summary=[['Kalem','Tutar'],['Toplam inşaat alanı',tr(sum(d['area'] for d in details),' m²')],['Toplam inşaat maliyeti',tr(total)],['Asgari işçilik oranı',f'%{rate:g}'],['Araştırma indirimi',f"%{project['discount']:g}"],['Hesaplanan asgari işçilik matrahı',tr(required)]]
+    summary=[['Kalem','Tutar'],['Toplam inşaat alanı',tr(sum(d['area'] for d in details),' m²')],['Toplam inşaat maliyeti',tr(total)],['Asgari işçilik oranı',f'%{rate:g}'],['Araştırma indirimi',f"%{project['discount']:g}"],['Hesaplanan asgari işçilik matrahı',tr(required)],['Tahmini SGK prim oranı',f'%{premium_rate:g}'],['Tahmini SGK primi',tr(estimated_premium)]]
     story += [tbl(summary,[320,190]),Spacer(1,12)]
     detailrows=[['Blok / Yapı','Alan (m²)','Birim maliyet','Yapı maliyeti']]
     for r in details: detailrows.append([r['name'],tr(r['area'],''),tr(r['cost'],''),tr(r['total'],'')])
     story += [tbl(detailrows,[146,99,125,140]),Spacer(1,12)]
-    explanation=f"Asgari işçilik oranı %{rate:g}, araştırma indirimi %{project['discount']:g}. Bu rapor yalnızca hesaplanan asgari işçilik matrahını gösterir; bildirilen prime esas kazanç ve ödenen primler karşılaştırılmamıştır. Birim maliyet ve tarihler kontrol edilmelidir."
+    explanation=f"Asgari işçilik oranı %{rate:g}, araştırma indirimi %{project['discount']:g}. Tahmini SGK primi, hesaplanan asgari işçilik matrahının %{premium_rate:g} oranıyla çarpılmasıyla bulunmuştur. Teşvikler, dönemsel oranlar ve bildirilen prime esas kazanç dikkate alınmadığından bu tutar kesin borç değildir. Birim maliyet ve tarihler kontrol edilmelidir."
     story.append(Paragraph(explanation,styles['DevTxt']))
     doc.build(story);return buf.getvalue()
 
@@ -91,6 +98,7 @@ with st.sidebar:
     st.header('⚙️ Hesaplama ayarları')
     work_rate=st.number_input('Asgari işçilik oranı (%)',min_value=0.,max_value=100.,value=9.0,step=.25,help='Yapı türüne ait resmî SGK tebliğ oranını kontrol ederek giriniz. %38,75 burada kullanılmaz.')
     discount=st.number_input('Araştırma indirimi (%)',min_value=0.,max_value=100.,value=25.,step=1.,help='SGK araştırmasının niteliğine göre uygulanabilmesi kontrol edilmelidir.')
+    premium_rate=st.number_input('Tahmini SGK prim oranı (%)',min_value=0.,max_value=100.,value=38.75,step=.25,help='Tahmini prim hesabı için kullanılır. Teşvik ve döneme göre gerçek prim oranı değişebilir.')
     st.caption('Bu hesap ön değerlendirmedir; SGK’nın nihai tahakkuku değildir.')
 
 st.subheader('1 · Proje bilgileri')
@@ -160,16 +168,18 @@ for e in entries:
 for w in warnings:st.warning(w)
 all_area=sum(r['area'] for r in details);total=sum(r['total'] for r in details)
 required=total*(work_rate/100)*(1-discount/100)
-p,q,r=st.columns(3)
+estimated_premium=required*(premium_rate/100)
+p,q,r,t=st.columns(4)
 p.metric('Toplam m²',tr(all_area,' m²'))
 q.metric('İnşaat maliyeti',tr(total))
 r.metric('Hesaplanan asgari işçilik matrahı',tr(required))
+t.metric(f'Tahmini SGK primi (%{premium_rate:g})',tr(estimated_premium))
 if ongoing: st.info('İNŞAAT DEVAM EDİYOR: Aşağıdaki sonuçlar seçilen hesap tarihi itibarıyla geçici tahmindir. Nihai asgari işçilik/ilişiksizlik sonucu olarak kullanılmamalıdır.')
 if warnings:st.error('Birim maliyetler tamamlanmadığı için hesap ve PDF sonucu kesinleştirilmemiştir. Önce eksikleri doldurunuz.')
 st.dataframe([{'Blok / Yapı':d['name'],'m²':d['area'],'Sınıf':d['klass'],'Birim TL/m²':d['cost'],'Toplam TL':d['total'],'Tarife yılları':', '.join(map(str,d['years']))} for d in details],hide_index=True,use_container_width=True)
 project={'ad':name or 'Belirtilmedi','ada':ada or '-','parsel':parsel or '-','dates':f'{start:%d.%m.%Y} - {end:%d.%m.%Y}' + (' (hesap tarihi)' if ongoing else ''),'status':'Devam ediyor (geçici hesap)' if ongoing else 'Tamamlandı','discount':discount}
 try:
-    pdf=pdf_report(project,details,total,required,work_rate)
+    pdf=pdf_report(project,details,total,required,work_rate,estimated_premium,premium_rate)
     st.download_button('📄 PDF İNDİR (ÖZET SONUÇ)',data=pdf,file_name=f'DEVRAN_ASGARI_ISCILIK_{ada or "ADA"}_{parsel or "PARSEL"}.pdf',mime='application/pdf',disabled=bool(warnings) or all_area<=0,type='primary',use_container_width=True)
 except Exception as e:st.error(f'PDF oluşturulamadı: {e}')
-st.caption('Hesaplama notu: Bu program bir ön hesap yapar. SGK kuralları, inşaatın durumu ve varsa kısmi ilişiksizlik ayrı değerlendirilmelidir.')
+st.caption('Hesaplama notu: Tahmini SGK primi, asgari işçilik matrahı × prim oranıdır; teşvik ve ödenmiş primler düşülmemiştir. Bu program bir ön hesap yapar. SGK kuralları, inşaatın durumu ve varsa kısmi ilişiksizlik ayrı değerlendirilmelidir.')
