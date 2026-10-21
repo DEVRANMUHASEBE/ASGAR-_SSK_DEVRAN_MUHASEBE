@@ -2,7 +2,7 @@ import io, os
 from datetime import date
 from pathlib import Path
 import streamlit as st
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, Image, KeepInFrame
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
@@ -52,7 +52,7 @@ with a:
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.7')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.11')
 st.divider()
 
 def tr(n, unit=' TL'):
@@ -78,7 +78,7 @@ def pdf_report(project,details,total,required,rate,estimated_premium,premium_rat
         try:
             logo=Image(str(LOGO),width=68,height=68,kind='proportional');logo.hAlign='CENTER';story.append(logo);story.append(Spacer(1,5))
         except Exception:pass
-    story += [Paragraph('DEVRAN MÂLİ MÜŞAVİRLİK',styles['DevTitle']),Paragraph('İNŞAAT ASGARİ İŞÇİLİK - ÖZET HESAP RAPORU',styles['DevTxt']),Spacer(1,12)]
+    story += [Paragraph('İNŞAAT ASGARİ İŞÇİLİK - ÖZET HESAP RAPORU',styles['DevTxt']),Spacer(1,12)]
     info=[['Proje / Mükellef',project['ad']],['Ada / Parsel',project['ada']+' / '+project['parsel']],['İnşaat Dönemi',project['dates']],['İnşaat Durumu',project['status']],['Yapı / Blok Sayısı',str(len(details))]]
     def tbl(rows,widths):
         t=Table([[Paragraph(str(v),styles['DevTxt']) for v in row] for row in rows],colWidths=widths,repeatRows=1)
@@ -86,13 +86,41 @@ def pdf_report(project,details,total,required,rate,estimated_premium,premium_rat
         return t
     story += [tbl(info,[145,365]),Spacer(1,12)]
     summary=[['Kalem','Tutar'],['Toplam inşaat alanı',tr(sum(d['area'] for d in details),' m²')],['Toplam inşaat maliyeti',tr(total)],['Asgari işçilik oranı',f'%{rate:g}'],['Araştırma indirimi',f"%{project['discount']:g}"],['Hesaplanan asgari işçilik matrahı',tr(required)],['Tahmini SGK prim oranı',f'%{premium_rate:g}'],['Tahmini SGK primi',tr(estimated_premium)]]
-    story += [tbl(summary,[320,190]),Spacer(1,12)]
-    detailrows=[['Blok / Yapı','Alan (m²)','Birim maliyet','Yapı maliyeti']]
-    for r in details: detailrows.append([r['name'],tr(r['area'],''),tr(r['cost'],''),tr(r['total'],'')])
-    story += [tbl(detailrows,[146,99,125,140]),Spacer(1,12)]
+    # Blok detaylarını sadece birden fazla blok olduğunda toplam alanın hemen altına yaz.
+    if len(details) > 1:
+        for i, block in enumerate(details, start=1):
+            block_name = block['name'] or f'{i}. Blok'
+            summary.insert(i + 1, [
+                f'    {block_name}',
+                f"{tr(block['area'], ' m²')}  /  {block['klass']}"
+            ])
+    summary[-1] = [f'<font color="white"><b>{v}</b></font>' for v in summary[-1]]
+    summary_table = tbl(summary,[320,190])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#183557')),
+        ('TEXTCOLOR', (0,-1), (-1,-1), colors.white),
+    ]))
+    story += [summary_table,Spacer(1,12)]
     explanation=f"Asgari işçilik oranı %{rate:g}, araştırma indirimi %{project['discount']:g}. Tahmini SGK primi, hesaplanan asgari işçilik matrahının %{premium_rate:g} oranıyla çarpılmasıyla bulunmuştur. Teşvikler, dönemsel oranlar ve bildirilen prime esas kazanç dikkate alınmadığından bu tutar kesin borç değildir. Birim maliyet ve tarihler kontrol edilmelidir."
     story.append(Paragraph(explanation,styles['DevTxt']))
-    doc.build(story);return buf.getvalue()
+    story.append(Spacer(1,16))
+    subcontractors = [['', 'ALT TAŞERON ÜNVANI', 'YATIRILAN SSK PRİMİ']]
+    subcontractors += [[str(i), '', ''] for i in range(1, 7)]
+    subcontractor_table = tbl(subcontractors, [34, 286, 190])
+    subcontractor_table.setStyle(TableStyle([
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white]),
+        ('ALIGN', (0,1), (0,-1), 'CENTER'),
+        ('TOPPADDING', (0,1), (-1,-1), 9),
+        ('BOTTOMPADDING', (0,1), (-1,-1), 9),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E8EDF5')),
+    ]))
+    story.append(subcontractor_table)
+    # Bütün PDF akışını tek A4 sayfalık kullanılabilir yüksekliğe sığdır.
+    # Çok sayıda blokta bütün öğeleri orantılı küçült; 2. sayfa oluşturma.
+    usable_width = A4[0] - doc.leftMargin - doc.rightMargin - 4
+    usable_height = A4[1] - doc.topMargin - doc.bottomMargin - 8
+    one_page = KeepInFrame(usable_width, usable_height, story, mode='shrink', hAlign='CENTER', vAlign='TOP')
+    doc.build([one_page]);return buf.getvalue()
 
 with st.sidebar:
     st.header('⚙️ Hesaplama ayarları')
@@ -129,14 +157,14 @@ else:
     for i in st.session_state.blocks:
         with st.container(border=True):
             # Her blok proje genelindeki tarihleri kullanır; ayrı tarih veya isim istenmez.
-            name = '' if len(st.session_state.blocks) == 1 else f'{st.session_state.blocks.index(i) + 1}. Blok'
-            if name:
-                st.markdown(f'**{name}**')
+            block_name = '' if len(st.session_state.blocks) == 1 else f'{st.session_state.blocks.index(i) + 1}. Blok'
+            if block_name:
+                st.markdown(f'**{block_name}**')
             a,b,d=st.columns([3,3,0.7])
             ar=a.number_input('Alan (m²)',min_value=0.,format='%.2f',key=f'a{i}')
             cl=b.selectbox('Yapı sınıfı',classes,index=classes.index('IV-B'),key=f'c{i}')
             if d.button('🗑️',key=f'd{i}',help='Bloğu sil'):remove_block(i);st.rerun()
-            entries.append({'name':name,'area':ar,'klass':cl,'start':start,'end':end})
+            entries.append({'name':block_name,'area':ar,'klass':cl,'start':start,'end':end})
 if st.button('➕ Blok Ekle',on_click=add_block):st.rerun()
 
 st.subheader('3 · Otomatik birim maliyet tarifesi')
