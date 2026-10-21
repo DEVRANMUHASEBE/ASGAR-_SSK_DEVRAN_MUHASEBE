@@ -52,7 +52,7 @@ with a:
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.6')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.7')
 st.divider()
 
 def tr(n, unit=' TL'):
@@ -120,7 +120,7 @@ def add_block():
 
 def remove_block(i):st.session_state.blocks.remove(i)
 
-st.caption('Blok yoksa doğrudan tek yapı alanını doldur. Varsa aşağıdaki + butonuyla istediğin kadar blok ekle.')
+st.caption('Blok yoksa toplam m² ve yapı sınıfını gir. Blok eklersen yalnızca her bloğun m² ve yapı sınıfı sorulur; hepsinde proje tarihleri geçerlidir.')
 if not st.session_state.blocks:
     x,y=st.columns(2);area=x.number_input('Toplam inşaat alanı (m²)',min_value=0.0,step=1.,format='%.2f');klass=y.selectbox('Yapı sınıfı',classes,index=classes.index('IV-B'))
     entries=[{'name':'','area':area,'klass':klass,'start':start,'end':end}]
@@ -128,10 +128,15 @@ else:
     entries=[]
     for i in st.session_state.blocks:
         with st.container(border=True):
-            a,b,c,d=st.columns([2,2,2,.7]); n=a.text_input('Blok adı',value='' if len(st.session_state.blocks)==1 else f'{i}. Blok',key=f'n{i}',placeholder='Tek blok ise boş bırakabilirsiniz');ar=b.number_input('Alan (m²)',min_value=0.,format='%.2f',key=f'a{i}');cl=c.selectbox('Yapı sınıfı',classes,index=classes.index('IV-B'),key=f'c{i}');
+            # Her blok proje genelindeki tarihleri kullanır; ayrı tarih veya isim istenmez.
+            name = '' if len(st.session_state.blocks) == 1 else f'{st.session_state.blocks.index(i) + 1}. Blok'
+            if name:
+                st.markdown(f'**{name}**')
+            a,b,d=st.columns([3,3,0.7])
+            ar=a.number_input('Alan (m²)',min_value=0.,format='%.2f',key=f'a{i}')
+            cl=b.selectbox('Yapı sınıfı',classes,index=classes.index('IV-B'),key=f'c{i}')
             if d.button('🗑️',key=f'd{i}',help='Bloğu sil'):remove_block(i);st.rerun()
-            x,y=st.columns(2);bs=x.date_input('Başlangıç',value=start,key=f's{i}',format='DD.MM.YYYY');be=y.date_input('Bitiş',value=end,key=f'e{i}',format='DD.MM.YYYY')
-            entries.append({'name':n,'area':ar,'klass':cl,'start':bs,'end':be})
+            entries.append({'name':name,'area':ar,'klass':cl,'start':start,'end':end})
 if st.button('➕ Blok Ekle',on_click=add_block):st.rerun()
 
 st.subheader('3 · Otomatik birim maliyet tarifesi')
