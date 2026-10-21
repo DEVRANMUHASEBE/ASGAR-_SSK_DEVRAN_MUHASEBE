@@ -67,7 +67,7 @@ with a:
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.12')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.13')
 st.divider()
 
 def tr(n, unit=' TL'):
@@ -101,14 +101,27 @@ def pdf_report(project,details,total,required,rate,estimated_premium,premium_rat
         return t
     story += [tbl(info,[145,365]),Spacer(1,12)]
     summary=[['Kalem','Tutar'],['Toplam inşaat alanı',tr(sum(d['area'] for d in details),' m²')],['Toplam inşaat maliyeti',tr(total)],['Asgari işçilik oranı',f'%{rate:g}'],['Araştırma indirimi',f"%{project['discount']:g}"],['Hesaplanan asgari işçilik matrahı',tr(required)],['Tahmini SGK prim oranı',f'%{premium_rate:g}'],['Tahmini SGK primi',tr(estimated_premium)]]
-    # Blok detaylarını sadece birden fazla blok olduğunda toplam alanın hemen altına yaz.
+    # Birden fazla blok varsa toplam m²'nin hemen altında sınıf, m²,
+    # seçilen birim fiyat ve ortalama hesabının yıllık dökümünü göster.
     if len(details) > 1:
+        insert_position = 2
         for i, block in enumerate(details, start=1):
             block_name = block['name'] or f'{i}. Blok'
-            summary.insert(i + 1, [
+            years = block['years']
+            annual_values = block.get('yearly_costs', [])
+            main_text = (f"{tr(block['area'], ' m²')} / {block['klass']}"
+                         f" / <b>{tr(block['cost'], ' TL/m²')}</b>")
+            if len(years) == 1:
+                explanation = f"{TARIFF_VERSIONS.get(years[0], str(years[0]))} yılı birim fiyatı"
+            else:
+                parts = [f"{year}: {tr(value, '')} TL" for year, value in annual_values]
+                explanation = (f"{len(years)} yıl ortalaması"
+                               f" ({' + '.join(parts)}) / {len(years)}")
+            summary.insert(insert_position, [
                 f'    {block_name}',
-                f"{tr(block['area'], ' m²')}  /  {block['klass']}"
+                f"{main_text}<br/><font size='7' color='#44556c'>{explanation}</font>"
             ])
+            insert_position += 1
     summary[-1] = [f'<font color="white"><b>{v}</b></font>' for v in summary[-1]]
     summary_table = tbl(summary,[320,190])
     summary_table.setStyle(TableStyle([
@@ -212,7 +225,8 @@ for e in entries:
     c,yrs=unit_cost(e)
     if e['end']<e['start']:warnings.append(f'{e["name"] or "Yapı"}: tarih aralığı hatalı')
     if c is None:warnings.append(f'{e["name"] or "Yapı"}: {e["klass"]} için {", ".join(map(str,yrs))} yılı/yılları birim maliyeti eksik')
-    details.append({'name':e['name'],'area':e['area'],'klass':e['klass'],'cost':c or 0,'total':e['area']*(c or 0),'years':yrs})
+    annual_costs = [(y, tariff_cost(y, e['klass']) if tariff_cost(y, e['klass']) is not None else overrides.get((y, e['klass']), 0)) for y in yrs]
+    details.append({'name':e['name'],'area':e['area'],'klass':e['klass'],'cost':c or 0,'total':e['area']*(c or 0),'years':yrs,'yearly_costs':annual_costs})
 for w in warnings:st.warning(w)
 all_area=sum(r['area'] for r in details);total=sum(r['total'] for r in details)
 required=total*(work_rate/100)*(1-discount/100)
