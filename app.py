@@ -176,7 +176,7 @@ def add_block():
 
 def remove_block(i):st.session_state.blocks.remove(i)
 
-st.caption('Blok yoksa toplam m² ve yapı sınıfını gir. Blok eklersen yalnızca her bloğun m² ve yapı sınıfı sorulur; hepsinde proje tarihleri geçerlidir.')
+st.caption('Blok yoksa toplam m² ve yapı sınıfını gir. Blok eklersen her blok için adını, m² ve yapı sınıfını gir; tüm bloklarda proje tarihleri geçerlidir.')
 if not st.session_state.blocks:
     x,y=st.columns(2);area=x.number_input('Toplam inşaat alanı (m²)',min_value=0.0,step=1.,format='%.2f');klass=y.selectbox('Yapı sınıfı',classes,index=classes.index('IV-B'))
     entries=[{'name':'','area':area,'klass':klass,'start':start,'end':end}]
@@ -184,10 +184,9 @@ else:
     entries=[]
     for i in st.session_state.blocks:
         with st.container(border=True):
-            # Her blok proje genelindeki tarihleri kullanır; ayrı tarih veya isim istenmez.
-            block_name = '' if len(st.session_state.blocks) == 1 else f'{st.session_state.blocks.index(i) + 1}. Blok'
-            if block_name:
-                st.markdown(f'**{block_name}**')
+            st.markdown(f'**{st.session_state.blocks.index(i) + 1}. Yapı / Blok**')
+            # İsim kullanıcı tarafından belirlenir; başlangıç/bitiş proje genelinden gelir.
+            block_name = st.text_input('Blok adı', placeholder='Örn. A Blok, Villa 1, Ticari Blok', key=f'name{i}').strip()
             a,b,d=st.columns([3,3,0.7])
             ar=a.number_input('Alan (m²)',min_value=0.,format='%.2f',key=f'a{i}')
             cl=b.selectbox('Yapı sınıfı',classes,index=classes.index('IV-B'),key=f'c{i}')
