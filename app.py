@@ -67,7 +67,7 @@ with a:
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.16')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.17')
 st.divider()
 
 def tr(n, unit=' TL'):
@@ -175,6 +175,7 @@ with st.sidebar:
     work_rate=st.number_input('Asgari işçilik oranı (%)',min_value=0.,max_value=100.,value=9.0,step=.25,help='Yapı türüne ait resmî SGK tebliğ oranını kontrol ederek giriniz. %38,75 burada kullanılmaz.')
     discount=st.number_input('Araştırma indirimi (%)',min_value=0.,max_value=100.,value=25.,step=1.,help='SGK araştırmasının niteliğine göre uygulanabilmesi kontrol edilmelidir.')
     premium_rate=st.number_input('Tahmini SGK prim oranı (%)',min_value=0.,max_value=100.,value=38.75,step=.25,help='Tahmini prim hesabı için kullanılır. Teşvik ve döneme göre gerçek prim oranı değişebilir.')
+    remaining_rate=st.number_input('Fark işçilik prim oranı (%)',min_value=0.,max_value=100.,value=35.75,step=.25,help='İnşaatı Kapat bölümünde kalan işçilik matrahına uygulanacak oran. İşsizlik primi hariç örnek oran %35,75.')
     st.caption('Bu hesap ön değerlendirmedir; SGK’nın nihai tahakkuku değildir.')
 
 st.subheader('1 · Proje bilgileri')
@@ -278,10 +279,9 @@ if st.button('🔴 İNŞAATI KAPAT',key='close_construction',use_container_width
     st.session_state.show_close=not st.session_state.show_close
 if st.session_state.show_close:
     st.subheader('İnşaat kapanış hesabı')
-    st.caption('İskâna kadar ödenen SGK primini giriniz. Ödenen prim %38,75 üzerinden matraha dönüştürülür; kalan matrah %35,75 ile hesaplanır.')
+    st.caption(f'İskâna kadar ödenen SGK primini giriniz. Ödenen prim %{premium_rate:g} üzerinden matraha dönüştürülür; kalan matrah %{remaining_rate:g} ile hesaplanır. Oranları sol taraftaki Hesaplama ayarları bölümünden değiştirebilirsiniz.')
     paid=st.number_input('İskâna kadar ödenen toplam SGK primi (TL)',min_value=0.0,value=0.0,step=1000.0,format='%.2f',key='paid_premium')
-    paid_rate=38.75
-    remaining_rate=35.75
+    paid_rate=premium_rate
     paid_base=paid/(paid_rate/100)
     remaining=max(0.0,required-paid_base)
     closing_premium=remaining*(remaining_rate/100)
@@ -289,10 +289,10 @@ if st.session_state.show_close:
     c1,c2,c3=st.columns(3)
     c1.metric('Ödenen prime karşılık gelen matrah',tr(paid_base))
     c2.metric('Kalan işçilik matrahı',tr(remaining))
-    c3.metric('Kapanışta tahmini SGK primi (%35,75)',tr(closing_premium))
+    c3.metric(f'Kapanışta tahmini SGK primi (%{remaining_rate:g})',tr(closing_premium))
     if over_base>0.01:
         st.success(f'Ödenen prime karşılık gelen matrah, gereken işçilik matrahını {tr(over_base)} aşıyor. Tahmini ek prim: 0,00 TL.')
-    st.warning('Önemli: Bu ters hesap yalnızca tüm ödemelerin %38,75 üzerinden ve teşviksiz hesaplandığı varsayımıyla geçerlidir. Farklı yıllar, indirim/teşvik, gecikme, alt taşeron ve işsizlik primi ayrımı nedeniyle ödenen tutar SGK’ya bildirilen PEK ile aynı sonucu vermeyebilir. Kapanıştan önce MUHSGK PEK toplamı ve SGK kayıtlarıyla kontrol ediniz. %35,75 hesabı da nihai SGK tahakkuku değildir.')
+    st.warning('Önemli: Bu ters hesap yalnızca tüm ödemelerin %38,75 üzerinden ve teşviksiz hesaplandığı varsayımıyla geçerlidir. Farklı yıllar, indirim/teşvik, gecikme, alt taşeron ve işsizlik primi ayrımı nedeniyle ödenen tutar SGK’ya bildirilen PEK ile aynı sonucu vermeyebilir. Kapanıştan önce MUHSGK PEK toplamı ve SGK kayıtlarıyla kontrol ediniz. Fark işçilik oranıyla bulunan hesap da nihai SGK tahakkuku değildir.')
     if ongoing:
         st.info('İnşaat henüz bitmedi seçili. Bu ekran yalnızca olası kapanış tutarını gösterir, ilişiksizlik işlemi yapmaz.')
     closing={'paid':paid,'paid_rate':paid_rate,'paid_base':paid_base,'remaining':remaining,
