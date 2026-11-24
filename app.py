@@ -67,13 +67,13 @@ with a:
     else: st.markdown('## 🏛️')
 with b:
     st.title('DEVRAN MÂLİ MÜŞAVİRLİK')
-    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.14')
+    st.caption('İNŞAAT ASGARİ İŞÇİLİK HESAPLAMA • v1.16')
 st.divider()
 
 def tr(n, unit=' TL'):
     return f'{n:,.2f}'.replace(',','X').replace('.',',').replace('X','.')+unit
 
-def pdf_report(project,details,total,required,rate,estimated_premium,premium_rate):
+def pdf_report(project,details,total,required,rate,estimated_premium,premium_rate,closing=None):
     buf=io.BytesIO(); doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=34,leftMargin=34,topMargin=32,bottomMargin=32)
     # ReportLab paketiyle birlikte gelen Vera fontu Türkçe karakterleri destekler.
     # Sunucudaki sistem fontlarına bağımlı değildir; Helvetica'ya düşülmez.
@@ -131,7 +131,27 @@ def pdf_report(project,details,total,required,rate,estimated_premium,premium_rat
     story += [summary_table,Spacer(1,12)]
     explanation=f"Asgari işçilik oranı %{rate:g}, araştırma indirimi %{project['discount']:g}. Tahmini SGK primi, hesaplanan asgari işçilik matrahının %{premium_rate:g} oranıyla çarpılmasıyla bulunmuştur. Teşvikler, dönemsel oranlar ve bildirilen prime esas kazanç dikkate alınmadığından bu tutar kesin borç değildir. Birim maliyet ve tarihler kontrol edilmelidir."
     story.append(Paragraph(explanation,styles['DevTxt']))
-    story.append(Spacer(1,16))
+    if closing is not None:
+        story.append(Spacer(1,9))
+        story.append(Paragraph('<b>İNŞAAT KAPANIŞ HESABI (TAHMİNİ)</b>', styles['DevTxt']))
+        close_rows = [
+            ['Kalem', 'Tutar'],
+            ['Gerekli işçilik matrahı',tr(required)],
+            ['İskâna kadar ödenen SGK primi',tr(closing['paid'])],
+            [f'Ödenen prime karşılık gelen matrah (%{closing["paid_rate"]:g})',tr(closing['paid_base'])],
+            ['Kalan işçilik matrahı',tr(closing['remaining'])],
+            [f'Kalan matraha uygulanacak prim (%{closing["remaining_rate"]:g})',tr(closing['closing_premium'])],
+        ]
+        close_rows[-1] = [f'<font color="white"><b>{v}</b></font>' for v in close_rows[-1]]
+        close_table=tbl(close_rows,[320,190])
+        close_table.setStyle(TableStyle([
+            ('BACKGROUND',(0,-1),(-1,-1),colors.HexColor('#183557')),
+            ('TEXTCOLOR',(0,-1),(-1,-1),colors.white),
+        ]))
+        story.append(close_table)
+        story.append(Spacer(1,5))
+        story.append(Paragraph('Kapanış sonucu tahminidir. Ödenen primi matraha dönüştürme hesabı, teşviksiz ve aynı orana tabi ödemeler varsayımıyla yapılmıştır. Kesin hesapta SGK’ya bildirilen prime esas kazançlar ve resmî tahakkuklar esas alınmalıdır.',styles['DevTxt']))
+    story.append(Spacer(1,12 if closing is not None else 16))
     subcontractors = [['', 'ALT TAŞERON ÜNVANI', 'YATIRILAN SSK PRİMİ']]
     subcontractors += [[str(i), '', ''] for i in range(1, 7)]
     subcontractor_table = tbl(subcontractors, [34, 286, 190])
@@ -244,3 +264,44 @@ try:
     st.download_button('📄 PDF İNDİR (ÖZET SONUÇ)',data=pdf,file_name=f'DEVRAN_ASGARI_ISCILIK_{ada or "ADA"}_{parsel or "PARSEL"}.pdf',mime='application/pdf',disabled=bool(warnings) or all_area<=0,type='primary',use_container_width=True)
 except Exception as e:st.error(f'PDF oluşturulamadı: {e}')
 st.caption('Hesaplama notu: Tahmini SGK primi, asgari işçilik matrahı × prim oranıdır; teşvik ve ödenmiş primler düşülmemiştir. Bu program bir ön hesap yapar. SGK kuralları, inşaatın durumu ve varsa kısmi ilişiksizlik ayrı değerlendirilmelidir.')
+
+
+# Önceki hesaplama bölümü değiştirilmemiştir. Kapanış ayrı ve isteğe bağlıdır.
+st.markdown("""<style>
+.st-key-close_construction button {background:#b42318 !important; color:white !important; border-color:#b42318 !important; font-weight:700 !important;}
+.st-key-close_construction button:hover {background:#8f1d14 !important; color:white !important;}
+</style>""",unsafe_allow_html=True)
+st.divider()
+if 'show_close' not in st.session_state:
+    st.session_state.show_close=False
+if st.button('🔴 İNŞAATI KAPAT',key='close_construction',use_container_width=True):
+    st.session_state.show_close=not st.session_state.show_close
+if st.session_state.show_close:
+    st.subheader('İnşaat kapanış hesabı')
+    st.caption('İskâna kadar ödenen SGK primini giriniz. Ödenen prim %38,75 üzerinden matraha dönüştürülür; kalan matrah %35,75 ile hesaplanır.')
+    paid=st.number_input('İskâna kadar ödenen toplam SGK primi (TL)',min_value=0.0,value=0.0,step=1000.0,format='%.2f',key='paid_premium')
+    paid_rate=38.75
+    remaining_rate=35.75
+    paid_base=paid/(paid_rate/100)
+    remaining=max(0.0,required-paid_base)
+    closing_premium=remaining*(remaining_rate/100)
+    over_base=max(0.0,paid_base-required)
+    c1,c2,c3=st.columns(3)
+    c1.metric('Ödenen prime karşılık gelen matrah',tr(paid_base))
+    c2.metric('Kalan işçilik matrahı',tr(remaining))
+    c3.metric('Kapanışta tahmini SGK primi (%35,75)',tr(closing_premium))
+    if over_base>0.01:
+        st.success(f'Ödenen prime karşılık gelen matrah, gereken işçilik matrahını {tr(over_base)} aşıyor. Tahmini ek prim: 0,00 TL.')
+    st.warning('Önemli: Bu ters hesap yalnızca tüm ödemelerin %38,75 üzerinden ve teşviksiz hesaplandığı varsayımıyla geçerlidir. Farklı yıllar, indirim/teşvik, gecikme, alt taşeron ve işsizlik primi ayrımı nedeniyle ödenen tutar SGK’ya bildirilen PEK ile aynı sonucu vermeyebilir. Kapanıştan önce MUHSGK PEK toplamı ve SGK kayıtlarıyla kontrol ediniz. %35,75 hesabı da nihai SGK tahakkuku değildir.')
+    if ongoing:
+        st.info('İnşaat henüz bitmedi seçili. Bu ekran yalnızca olası kapanış tutarını gösterir, ilişiksizlik işlemi yapmaz.')
+    closing={'paid':paid,'paid_rate':paid_rate,'paid_base':paid_base,'remaining':remaining,
+             'remaining_rate':remaining_rate,'closing_premium':closing_premium}
+    if not warnings and all_area>0:
+        try:
+            close_pdf=pdf_report(project,details,total,required,work_rate,estimated_premium,premium_rate,closing=closing)
+            st.download_button('📄 KAPANIŞ HESABI PDF İNDİR',data=close_pdf,
+                file_name=f'DEVRAN_INSAAT_KAPANIS_{ada or "ADA"}_{parsel or "PARSEL"}.pdf',
+                mime='application/pdf',use_container_width=True,key='close_pdf')
+        except Exception as e:
+            st.error(f'Kapanış PDF oluşturulamadı: {e}')
