@@ -137,8 +137,7 @@ def pdf_report(project,details,total,required,rate,estimated_premium,premium_rat
         close_rows = [
             ['Kalem', 'Tutar'],
             ['Gerekli işçilik matrahı',tr(required)],
-            ['İskâna kadar ödenen SGK primi',tr(closing['paid'])],
-            [f'Ödenen prime karşılık gelen matrah (%{closing["paid_rate"]:g})',tr(closing['paid_base'])],
+            ['Ödenen prime karşılık gelen matrah',tr(closing['paid_base'])],
             ['Kalan işçilik matrahı',tr(closing['remaining'])],
             [f'Kalan matraha uygulanacak prim (%{closing["remaining_rate"]:g})',tr(closing['closing_premium'])],
         ]
@@ -150,7 +149,7 @@ def pdf_report(project,details,total,required,rate,estimated_premium,premium_rat
         ]))
         story.append(close_table)
         story.append(Spacer(1,5))
-        story.append(Paragraph('Kapanış sonucu tahminidir. Ödenen primi matraha dönüştürme hesabı, teşviksiz ve aynı orana tabi ödemeler varsayımıyla yapılmıştır. Kesin hesapta SGK’ya bildirilen prime esas kazançlar ve resmî tahakkuklar esas alınmalıdır.',styles['DevTxt']))
+        story.append(Paragraph('Kapanış sonucu tahminidir. Girilen matrah, SGK’ya bildirilen prime esas kazançlar üzerinden kontrol edilmelidir. Fark işçilik prim hesabı kesin SGK tahakkuku değildir.',styles['DevTxt']))
     story.append(Spacer(1,12 if closing is not None else 16))
     subcontractors = [['', 'ALT TAŞERON ÜNVANI', 'YATIRILAN SSK PRİMİ']]
     subcontractors += [[str(i), '', ''] for i in range(1, 7)]
@@ -279,23 +278,21 @@ if st.button('🔴 İNŞAATI KAPAT',key='close_construction',use_container_width
     st.session_state.show_close=not st.session_state.show_close
 if st.session_state.show_close:
     st.subheader('İnşaat kapanış hesabı')
-    st.caption(f'İskâna kadar ödenen SGK primini giriniz. Ödenen prim %{premium_rate:g} üzerinden matraha dönüştürülür; kalan matrah %{remaining_rate:g} ile hesaplanır. Oranları sol taraftaki Hesaplama ayarları bölümünden değiştirebilirsiniz.')
-    paid=st.number_input('İskâna kadar ödenen toplam SGK primi (TL)',min_value=0.0,value=0.0,step=1000.0,format='%.2f',key='paid_premium')
-    paid_rate=premium_rate
-    paid_base=paid/(paid_rate/100)
+    st.caption(f'İskâna kadar SGK’ya bildirilen prime esas kazanç (matrah) toplamını doğrudan giriniz. Sistem bu tutarı asgari işçilik matrahından düşer; kalan matrahı %{remaining_rate:g} fark işçilik prim oranıyla hesaplar. Oranı sol taraftaki Hesaplama ayarları bölümünden değiştirebilirsiniz.')
+    paid_base=st.number_input('Ödenen prime karşılık gelen matrah (TL)',min_value=0.0,value=0.0,step=1000.0,format='%.2f',key='paid_base_input',help='Ödenmiş prim tutarını değil, bu primlere esas bildirilen matrah (PEK) toplamını girin.')
     remaining=max(0.0,required-paid_base)
     closing_premium=remaining*(remaining_rate/100)
     over_base=max(0.0,paid_base-required)
     c1,c2,c3=st.columns(3)
-    c1.metric('Ödenen prime karşılık gelen matrah',tr(paid_base))
+    c1.metric('Girilen işçilik matrahı',tr(paid_base))
     c2.metric('Kalan işçilik matrahı',tr(remaining))
     c3.metric(f'Kapanışta tahmini SGK primi (%{remaining_rate:g})',tr(closing_premium))
     if over_base>0.01:
-        st.success(f'Ödenen prime karşılık gelen matrah, gereken işçilik matrahını {tr(over_base)} aşıyor. Tahmini ek prim: 0,00 TL.')
-    st.warning('Önemli: Bu ters hesap yalnızca tüm ödemelerin %38,75 üzerinden ve teşviksiz hesaplandığı varsayımıyla geçerlidir. Farklı yıllar, indirim/teşvik, gecikme, alt taşeron ve işsizlik primi ayrımı nedeniyle ödenen tutar SGK’ya bildirilen PEK ile aynı sonucu vermeyebilir. Kapanıştan önce MUHSGK PEK toplamı ve SGK kayıtlarıyla kontrol ediniz. Fark işçilik oranıyla bulunan hesap da nihai SGK tahakkuku değildir.')
+        st.success(f'Girilen matrah, gereken işçilik matrahını {tr(over_base)} aşıyor. Tahmini ek prim: 0,00 TL.')
+    st.warning('Önemli: Prim ödemesi tutarını değil, SGK’ya bildirilen prime esas kazanç (PEK) toplamını giriniz. Dönemsel prim oranı değişikliklerinden etkilenmemesi için primden matraha ters hesaplama yapılmaz. Alt taşeron bildirimleri, teşvikler ve resmî SGK kayıtları kapanış öncesinde ayrıca kontrol edilmelidir. Hesap kesin tahakkuk değildir.')
     if ongoing:
         st.info('İnşaat henüz bitmedi seçili. Bu ekran yalnızca olası kapanış tutarını gösterir, ilişiksizlik işlemi yapmaz.')
-    closing={'paid':paid,'paid_rate':paid_rate,'paid_base':paid_base,'remaining':remaining,
+    closing={'paid_base':paid_base,'remaining':remaining,
              'remaining_rate':remaining_rate,'closing_premium':closing_premium}
     if not warnings and all_area>0:
         try:
